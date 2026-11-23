@@ -1,0 +1,167 @@
+﻿<Application x:Class="NetShareDoctor.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <SolidColorBrush x:Key="Bg" Color="#F4F5F7"/>
+        <SolidColorBrush x:Key="Surface" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="Line" Color="#DDE1E7"/>
+        <SolidColorBrush x:Key="Ink" Color="#1B2230"/>
+        <SolidColorBrush x:Key="Muted" Color="#5B6474"/>
+        <SolidColorBrush x:Key="Accent" Color="#2259D6"/>
+        <SolidColorBrush x:Key="AccentDark" Color="#1A47AD"/>
+        <SolidColorBrush x:Key="Hover" Color="#EBEFF6"/>
+        <SolidColorBrush x:Key="OkBrush" Color="#15803D"/>
+        <SolidColorBrush x:Key="WarnBrush" Color="#B45309"/>
+        <SolidColorBrush x:Key="BadBrush" Color="#C62828"/>
+        <SolidColorBrush x:Key="InfoBrush" Color="#5B6474"/>
+        <FontFamily x:Key="Mono">Cascadia Mono, Consolas</FontFamily>
+
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <Style TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+            <Setter Property="Background" Value="{StaticResource Surface}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="bd" Property="BorderThickness" Value="2"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource Hover}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{StaticResource Accent}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Accent}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource AccentDark}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="6,5"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="PasswordBox">
+            <Setter Property="Padding" Value="6,5"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Padding" Value="6,5"/>
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource Surface}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="16"/>
+        </Style>
+
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+        </Style>
+
+        <Style TargetType="TabItem">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="bd" Padding="14,9" Margin="0,0,2,0" BorderThickness="0,0,0,2"
+                                BorderBrush="Transparent" Background="Transparent" Cursor="Hand">
+                            <ContentPresenter x:Name="cp" ContentSource="Header" TextElement.Foreground="{StaticResource Muted}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{StaticResource Hover}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="cp" Property="TextElement.Foreground" Value="{StaticResource Accent}"/>
+                                <Setter TargetName="cp" Property="TextElement.FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- One diagnostic result: status badge, title, explanation, optional fix button. -->
+        <DataTemplate x:Key="CheckTemplate">
+            <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="14,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Border x:Name="badge" CornerRadius="4" Padding="0,3" Width="76" VerticalAlignment="Top"
+                            Margin="0,1,14,0" Background="{StaticResource InfoBrush}">
+                        <TextBlock Text="{Binding StatusText}" Foreground="White" FontWeight="SemiBold" FontSize="11"
+                                   HorizontalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="{StaticResource Ink}"/>
+                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Hint}" Margin="0,3,0,0"/>
+                        <TextBlock Text="{Binding Category}" FontSize="11" Foreground="{StaticResource Muted}" Opacity="0.8" Margin="0,4,0,0"/>
+                    </StackPanel>
+                    <Button Grid.Column="2" Content="{Binding FixLabel}" Command="{Binding FixCommand}"
+                            Visibility="{Binding HasFix, Converter={StaticResource BoolToVis}}"
+                            ToolTip="{Binding FixTooltip}" VerticalAlignment="Top" Margin="14,0,0,0"/>
+                </Grid>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Status}" Value="Ok">
+                    <Setter TargetName="badge" Property="Background" Value="{StaticResource OkBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="Warning">
+                    <Setter TargetName="badge" Property="Background" Value="{StaticResource WarnBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="Problem">
+                    <Setter TargetName="badge" Property="Background" Value="{StaticResource BadBrush}"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </Application.Resources>
+</Application>

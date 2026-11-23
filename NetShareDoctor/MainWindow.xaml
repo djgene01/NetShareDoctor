@@ -1,0 +1,35 @@
+<Window x:Class="NetShareDoctor.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:p="clr-namespace:NetShareDoctor.Pages"
+        Title="Network Share Doctor" Height="840" Width="1200" MinWidth="920" MinHeight="600"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource Bg}"
+        FontFamily="Segoe UI" FontSize="13" Foreground="{StaticResource Ink}">
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}"
+                BorderThickness="0,0,0,1" Padding="20,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Network Share Doctor" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="SubtitleText" Style="{StaticResource Hint}" Margin="0,2,0,0"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="AdminText" Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <Button x:Name="ElevateButton" Content="Restart as administrator" Click="Elevate_Click"
+                            ToolTip="Fixes then run without a UAC prompt each time."/>
+                </StackPanel>
+            </Grid>
+        </Border>
+        <TabControl Margin="16,8,16,16" Padding="0" Background="Transparent" BorderThickness="0">
+            <TabItem Header="Diagnose this PC"><p:DiagnosePage/></TabItem>
+            <TabItem Header="Connect to other PCs"><p:ConnectionsPage/></TabItem>
+            <TabItem Header="Mapped drives"><p:DrivesPage/></TabItem>
+            <TabItem Header="My shared folders"><p:SharesPage/></TabItem>
+            <TabItem Header="Command toolbox"><p:ToolsPage/></TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

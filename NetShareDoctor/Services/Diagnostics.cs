@@ -41,7 +41,12 @@ public static class Diagnostics
         $r.Server=[pscustomobject]@{Smb1=[bool]$s.EnableSMB1Protocol;Smb2=[bool]$s.EnableSMB2Protocol;Signing=[bool]$s.RequireSecuritySignature}
         $c=Get-SmbClientConfiguration
         $r.Client=[pscustomobject]@{Signing=[bool]$c.RequireSecuritySignature;Guest=[bool]$c.EnableInsecureGuestLogons}
-        $r.Shares=@(Get-SmbShare | Where-Object { -not $_.Special } | ForEach-Object { [pscustomobject]@{Name=$_.Name;Path=$_.Path} })
+        $r.Shares=@(Get-SmbShare | Where-Object { -not $_.Special } | ForEach-Object {
+            $sh=$_
+            $acl=$null; if ($sh.Path -and (Test-Path -LiteralPath $sh.Path)) { $acl=Get-Acl -LiteralPath $sh.Path }
+            [pscustomobject]@{Name=$sh.Name;Path=$sh.Path;AclRead=[bool]$acl
+                Access=@(Get-SmbShareAccess -Name $sh.Name | Where-Object { "$($_.AccessControlType)" -eq 'Allow' } | ForEach-Object { [pscustomobject]@{Account="$($_.AccountName)";Right="$($_.AccessRight)"} })
+                Ntfs=@(if ($acl) { $acl.Access | Where-Object { "$($_.AccessControlType)" -eq 'Allow' } | ForEach-Object { "$($_.IdentityReference)" } }) } })
         $r | ConvertTo-Json -Depth 5 -Compress
         """;
 
@@ -193,6 +198,7 @@ public static class Diagnostics
                          (fwOn ? "" : " The firewall is off right now, but this rule will block again as soon as it's turned back on."),
                 FixLabel = "Disable rule",
                 FixScript = $"Disable-NetFirewallRule -Name {Shell.Q(S(b, "Name"))}",
+                FixNeedsConfirm = true,
             });
         }
         if (otherBlocks > 0)
@@ -246,7 +252,7 @@ public static class Diagnostics
         add(B(server, "Signing")
             ? new() { Category = smb, Status = CheckStatus.Info, Title = "This PC requires signed connections (SMB signing)",
                 Detail = "Windows, macOS and current Linux connect fine. Some TVs, phone apps, media players and old NAS boxes can't, and fail even with the right password.",
-                FixLabel = "Allow unsigned", FixScript = "Set-SmbServerConfiguration -RequireSecuritySignature $false -Force" }
+                FixLabel = "Allow unsigned", FixScript = "Set-SmbServerConfiguration -RequireSecuritySignature $false -Force", FixNeedsConfirm = true }
             : new() { Category = smb, Status = CheckStatus.Info, Title = "This PC accepts unsigned connections",
                 Detail = "Older devices can connect. Requiring signing is safer if you only use modern computers.",
                 FixLabel = "Require signing", FixScript = "Set-SmbServerConfiguration -RequireSecuritySignature $true -Force" });
@@ -257,7 +263,8 @@ public static class Diagnostics
                 FixLabel = "Block guest shares", FixScript = "Set-SmbClientConfiguration -EnableInsecureGuestLogons $false -Force" }
             : new() { Category = smb, Status = CheckStatus.Info, Title = "Password-free guest shares are blocked when connecting out",
                 Detail = "Normal and safer. Only old NAS boxes and router USB shares need guest access (error 1272 means this).",
-                FixLabel = "Allow guest shares", FixScript = "Set-SmbClientConfiguration -EnableInsecureGuestLogons $true -RequireSecuritySignature $false -Force" });
+                FixLabel = "Allow guest shares", FixScript = "Set-SmbClientConfiguration -EnableInsecureGuestLogons $true -RequireSecuritySignature $false -Force",
+                FixNeedsConfirm = true });
 
         // ---------- Shares & sign-in ----------
         const string sh = "Shared folders";
@@ -284,6 +291,28 @@ public static class Diagnostics
                     : new() { Category = sh, Status = CheckStatus.Problem, Title = $"This PC can't open its own share {unc}",
                         Detail = "Sharing is broken on this PC itself. Fix the problems above first." });
             }
+
+            var permissionIssues = 0;
+            foreach (var s in shares.Where(s => B(s, "AclRead")))
+            {
+                var granted = Arr(s, "Access").Select(a => (Account: S(a, "Account"), Right: S(a, "Right"))).ToList();
+                var missing = MissingNtfsAccounts(granted, Arr(s, "Ntfs").Select(n => n.GetString() ?? ""));
+                if (missing.Count == 0) continue;
+                permissionIssues++;
+                var path = S(s, "Path");
+                add(new()
+                {
+                    Category = sh, Status = CheckStatus.Warning,
+                    Title = $"\"{S(s, "Name")}\" is shared with {string.Join(", ", missing.Select(m => m.Account))}, but the folder doesn't list them",
+                    Detail = $"Windows checks the share and the folder's own (NTFS) permissions, and the stricter one wins. {path} has no entry for " +
+                             $"{string.Join(", ", missing.Select(m => m.Account))}, so they may get \"Access denied\" (error 5). " +
+                             "If they get in through a group this app can't see, ignore this.",
+                    FixLabel = "Grant folder access",
+                    FixScript = string.Join("\n", missing.Select(m => NtfsGrantScript(path, m.Account, m.Right))),
+                });
+            }
+            if (permissionIssues == 0 && shares.Any(s => B(s, "AclRead")))
+                add(new() { Category = sh, Status = CheckStatus.Ok, Title = "The folders' own permissions include the accounts they're shared with" });
         }
 
         var user = S(root, "User");
@@ -300,6 +329,34 @@ public static class Diagnostics
     {
         var probe = Task.Run(() => Directory.Exists(unc));
         return await Task.WhenAny(probe, Task.Delay(timeout)) == probe && probe.Result;
+    }
+
+    private static readonly string[] WideGroups = ["Everyone", "Users", "Authenticated Users"];
+
+    /// <summary>
+    /// Share accounts with no matching entry in the folder's NTFS permissions. Everyone, Users or Authenticated
+    /// Users on the folder count as covering every account; otherwise names match without their domain
+    /// (BUILTIN\Administrators = Administrators). Nested groups aren't resolved.
+    /// </summary>
+    internal static List<(string Account, string Right)> MissingNtfsAccounts(
+        IEnumerable<(string Account, string Right)> shareAccess, IEnumerable<string> ntfsIdentities)
+    {
+        static string Short(string name) => name[(name.LastIndexOf('\\') + 1)..].Trim();
+        var ntfs = ntfsIdentities.Select(Short).Where(n => n.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (WideGroups.Any(ntfs.Contains)) return [];
+        return shareAccess
+            .Where(a => a.Account.Length > 0 && !ntfs.Contains(Short(a.Account)))
+            .DistinctBy(a => a.Account, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>The icacls grant the "My shared folders" tab uses: read for Read shares, modify for Change/Full.</summary>
+    internal static string NtfsGrantScript(string path, string account, string shareRight)
+    {
+        var perm = shareRight.Equals("Read", StringComparison.OrdinalIgnoreCase) ? "RX" : "M";
+        return $"$g = {Shell.Q(account)} + ':(OI)(CI){perm}'\n" +
+               $"icacls.exe {Shell.Q(path)} /grant $g | Out-Null\n" +
+               "if ($LASTEXITCODE -ne 0) { throw \"Setting the folder permissions failed (icacls exit $LASTEXITCODE).\" }";
     }
 
     internal static bool ProfileMatches(string profile, string category) =>

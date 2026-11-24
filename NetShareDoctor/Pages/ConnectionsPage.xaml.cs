@@ -10,6 +10,7 @@ namespace NetShareDoctor.Pages;
 public partial class ConnectionsPage : UserControl
 {
     private readonly ObservableCollection<SavedConnection> _items;
+    private bool _persisting;
 
     public ConnectionsPage()
     {
@@ -19,9 +20,32 @@ public partial class ConnectionsPage : UserControl
         StoreText.Text = "Saved in " + ConnectionStore.FilePath + ". Passwords are kept only in Windows Credential Manager.";
         if (_items.Count == 0) NewItem();
         else SavedList.SelectedIndex = 0;
+        ConnectionStore.Changed += () => Dispatcher.Invoke(Reload);
     }
 
     private SavedConnection? Current => SavedList.SelectedItem as SavedConnection;
+
+    /// <summary>
+    /// Picks up connections saved elsewhere (the Mapped drives tab). Items already in the list keep their
+    /// unsaved edits, and new unsaved items stay; only connections this page hasn't seen are added.
+    /// </summary>
+    private void Reload()
+    {
+        if (_persisting) return;
+        var selectedId = Current?.Id;
+        var known = _items.Select(i => i.Id).ToHashSet();
+        foreach (var c in ConnectionStore.Load().Where(c => !known.Contains(c.Id)))
+            _items.Add(c);
+        SavedList.SelectedItem = _items.FirstOrDefault(i => i.Id == selectedId) ?? _items.FirstOrDefault();
+    }
+
+    /// <summary>Disables the action buttons while a connect, test or listing runs.</summary>
+    private async Task BusyAsync(Func<Task> work)
+    {
+        ActionsPanel.IsEnabled = false;
+        try { await work(); }
+        finally { ActionsPanel.IsEnabled = true; }
+    }
 
     private void NewItem()
     {
@@ -78,8 +102,10 @@ public partial class ConnectionsPage : UserControl
 
     private void Persist()
     {
+        _persisting = true;
         try { ConnectionStore.Save(_items); }
         catch (Exception ex) { Log("Couldn't save connections: " + ex.Message); }
+        finally { _persisting = false; }
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
@@ -93,8 +119,22 @@ public partial class ConnectionsPage : UserControl
     {
         var c = Current;
         if (c == null) return;
-        if (MessageBox.Show(Window.GetWindow(this)!, $"Delete the saved connection \"{c.Name}\"?\nThis doesn't disconnect it or touch the other PC.",
-                "Delete connection", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        var owner = Window.GetWindow(this)!;
+        var question = $"Delete the saved connection \"{c.Name}\"?\nThis doesn't disconnect it or touch the other PC.";
+        if (c.Host.Length == 0)
+        {
+            if (MessageBox.Show(owner, question, "Delete connection", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        }
+        else
+        {
+            var answer = MessageBox.Show(owner,
+                question + "\n\nDelete saved password too?\n" +
+                $"  Yes: also delete the password saved for {c.Host} in Windows Credential Manager (other connections to {c.Host} use it too).\n" +
+                "  No: delete only the connection.",
+                "Delete connection", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            if (answer == MessageBoxResult.Cancel) return;
+            if (answer == MessageBoxResult.Yes) Log(SmbClient.ForgetPassword(c.Host));
+        }
         _items.Remove(c);
         Persist();
         if (_items.Count == 0) NewItem(); else SavedList.SelectedIndex = 0;
@@ -109,8 +149,7 @@ public partial class ConnectionsPage : UserControl
             Log("Pick a shared folder first. Press \"Show shares\" to list them.");
             return;
         }
-        ConnectButton.IsEnabled = false;
-        try
+        await BusyAsync(async () =>
         {
             Log($"Connecting to {c.UncPath}…");
             var (ok, log) = await SmbClient.ConnectAsync(c, PasswordBox.Password);
@@ -120,16 +159,18 @@ public partial class ConnectionsPage : UserControl
                 PasswordBox.Clear();
                 Persist();
                 Log("Connected." + (c.HasDrive ? $" It's drive {c.DriveLetter} in Explorer." : ""));
+                if (Shell.IsAdmin && c.HasDrive)
+                    Log("Note: this app runs as administrator, so the drive belongs to the administrator session and Explorer may not show it. " +
+                        "Connect from a normal (not elevated) window to see it in Explorer.");
             }
-        }
-        finally { ConnectButton.IsEnabled = true; }
+        });
     }
 
     private async void Disconnect_Click(object sender, RoutedEventArgs e)
     {
         if (!Normalize()) return;
-        var (_, log) = await SmbClient.DisconnectAsync(Current!);
-        Log(log);
+        var c = Current!;
+        await BusyAsync(async () => Log((await SmbClient.DisconnectAsync(c)).Log));
     }
 
     private void Open_Click(object sender, RoutedEventArgs e)
@@ -144,16 +185,15 @@ public partial class ConnectionsPage : UserControl
     private async void Test_Click(object sender, RoutedEventArgs e)
     {
         if (!Normalize()) return;
-        TestButton.IsEnabled = false;
-        try
+        var host = Current!.Host;
+        await BusyAsync(async () =>
         {
             ResultsList.ItemsSource = null;
-            Log($"Testing {Current!.Host}…");
-            var results = await RemoteTester.TestAsync(Current!.Host);
+            Log($"Testing {host}…");
+            var results = await RemoteTester.TestAsync(host);
             ResultsList.ItemsSource = results;
             Log(string.Join("\n", results.Select(r => r.ToString())));
-        }
-        finally { TestButton.IsEnabled = true; }
+        });
     }
 
     private async void ShowShares_Click(object sender, RoutedEventArgs e)
@@ -161,7 +201,9 @@ public partial class ConnectionsPage : UserControl
         if (!Normalize()) return;
         var host = Current!.Host;
         Log($"Listing shares on {host}…");
-        var (shares, raw) = await RemoteTester.ListSharesAsync(host);
+        List<string> shares = [];
+        ShellResult raw = null!;
+        await BusyAsync(async () => (shares, raw) = await RemoteTester.ListSharesAsync(host));
         SharesWrap.Children.Clear();
         if (!raw.Success)
         {
@@ -184,7 +226,8 @@ public partial class ConnectionsPage : UserControl
     private async void Clear_Click(object sender, RoutedEventArgs e)
     {
         if (!Normalize()) return;
-        Log(await SmbClient.ClearLoginsAsync(Current!.Host));
+        var host = Current!.Host;
+        await BusyAsync(async () => Log(await SmbClient.ClearLoginsAsync(host)));
     }
 
     private void ClearLog_Click(object sender, RoutedEventArgs e) => LogBox.Clear();

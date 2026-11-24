@@ -1,0 +1,19 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+  <!-- Build with build.ps1, which publishes the app first and passes Version and PublishDir. -->
+  <PropertyGroup>
+    <Version Condition="'$(Version)' == ''">1.1.0</Version>
+    <AppPublishDir>$(PublishDir)</AppPublishDir>
+    <AppPublishDir Condition="'$(AppPublishDir)' == ''">$(MSBuildThisFileDirectory)..\dist\NetShareDoctor</AppPublishDir>
+    <AppPublishDir>$(AppPublishDir.TrimEnd('\'))</AppPublishDir>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <OutputName>NetShareDoctor-$(Version)-win-x64</OutputName>
+    <DefineConstants>PublishDir=$(AppPublishDir);Version=$(Version)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="5.0.2" />
+  </ItemGroup>
+
+</Project>

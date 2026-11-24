@@ -1,5 +1,7 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Win32;
 using NetShareDoctor.Models;
 using NetShareDoctor.Services;
 
@@ -25,6 +27,8 @@ public partial class DiagnosePage : UserControl
     {
         RunButton.IsEnabled = false;
         CopyButton.IsEnabled = false;
+        SaveButton.IsEnabled = false;
+        Progress.Visibility = Visibility.Visible;
         SummaryText.Text = "Checking network, firewall, services and shares… (takes a few seconds)";
         try
         {
@@ -56,13 +60,18 @@ public partial class DiagnosePage : UserControl
         }
         finally
         {
+            Progress.Visibility = Visibility.Collapsed;
             RunButton.IsEnabled = true;
-            CopyButton.IsEnabled = _checks.Count > 0;
+            CopyButton.IsEnabled = SaveButton.IsEnabled = _checks.Count > 0;
         }
     }
 
     private async Task FixAsync(DiagnosticCheck check)
     {
+        if (check.FixNeedsConfirm && MessageBox.Show(Window.GetWindow(this)!,
+                $"{check.Title}\n\n{check.Detail}\n\n\"{check.FixLabel}\" makes this PC less strict about who and what can connect. " +
+                "Only do it if you need it for a device that can't connect otherwise.\n\nContinue?",
+                check.FixLabel, MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
         var r = await Shell.PowerShellElevatedAsync(check.FixScript!);
         if (!r.Success)
         {
@@ -77,11 +86,30 @@ public partial class DiagnosePage : UserControl
     private void ApplyFilter() =>
         ChecksList.ItemsSource = ProblemsOnly.IsChecked == true ? _checks.Where(c => c.NeedsAttention).ToList() : _checks;
 
+    private string ReportText() =>
+        $"Network Share Doctor report – {Environment.MachineName} – {DateTime.Now:yyyy-MM-dd HH:mm}\n\n" +
+        string.Join("\n", _checks.Select(c => c.ToString()));
+
     private void Copy_Click(object sender, RoutedEventArgs e)
     {
-        var text = $"Network Share Doctor report – {Environment.MachineName} – {DateTime.Now:yyyy-MM-dd HH:mm}\n\n" +
-                   string.Join("\n", _checks.Select(c => c.ToString()));
-        Clipboard.SetText(text);
+        Clipboard.SetText(ReportText());
         SummaryText.Text = "Report copied to the clipboard.";
+    }
+
+    private void Save_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new SaveFileDialog
+        {
+            Title = "Save report",
+            Filter = "Text file (*.txt)|*.txt",
+            FileName = $"NetShareDoctor-{Environment.MachineName}-{DateTime.Now:yyyyMMdd-HHmm}.txt",
+        };
+        if (dlg.ShowDialog(Window.GetWindow(this)) != true) return;
+        try
+        {
+            File.WriteAllText(dlg.FileName, ReportText().Replace("\n", Environment.NewLine));
+            SummaryText.Text = "Report saved to " + dlg.FileName;
+        }
+        catch (Exception ex) { SummaryText.Text = "Couldn't save the report: " + ex.Message; }
     }
 }

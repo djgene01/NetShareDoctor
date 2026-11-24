@@ -34,6 +34,8 @@ public sealed class DiagnosticCheck : ObservableObject
     /// <summary>PowerShell run as administrator when the fix is clicked.</summary>
     public string? FixScript { get; init; }
     public string? FixTooltip => FixScript == null ? null : "Runs as administrator:\n" + FixScript;
+    /// <summary>The fix lowers security, so ask before running it.</summary>
+    public bool FixNeedsConfirm { get; init; }
 
     private ICommand? _fixCommand;
     public ICommand? FixCommand { get => _fixCommand; set { if (Set(ref _fixCommand, value)) Raise(nameof(HasFix)); } }

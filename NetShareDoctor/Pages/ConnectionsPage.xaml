@@ -91,7 +91,7 @@
                         <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0" FontSize="12"
                                    Text="Username: an account on the other PC, as PCNAME\user or its Microsoft account email. Use the account password; a Windows PIN doesn't work over the network."/>
 
-                        <WrapPanel Margin="0,14,0,0">
+                        <WrapPanel x:Name="ActionsPanel" Margin="0,14,0,0">
                             <Button Style="{StaticResource Primary}" Content="Connect" Click="Connect_Click" Margin="0,0,8,6" x:Name="ConnectButton"/>
                             <Button Content="Open in Explorer" Click="Open_Click" Margin="0,0,8,6"/>
                             <Button Content="Disconnect" Click="Disconnect_Click" Margin="0,0,20,6"/>

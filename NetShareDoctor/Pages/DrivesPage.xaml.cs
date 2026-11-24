@@ -64,9 +64,9 @@ public partial class DrivesPage : UserControl
     {
         if (Selected() is not { } row) return;
         var target = row.Local != "(none)" ? row.Local : row.Remote;
-        var r = await Shell.RunAsync("net.exe", ["use", target, "/delete", "/y"]);
+        var (_, log) = await SmbClient.DisconnectAsync(target);
         await RefreshAsync();
-        StatusText.Text = r.Text;
+        StatusText.Text = log;
     }
 
     private void SaveAs_Click(object sender, RoutedEventArgs e)
@@ -74,12 +74,21 @@ public partial class DrivesPage : UserControl
         if (Selected() is not { } row) return;
         var (host, share) = RemoteTester.Split(row.Remote);
         var items = ConnectionStore.Load();
+        if (items.Any(c => c.Host.Equals(host, StringComparison.OrdinalIgnoreCase) && c.Share.Equals(share, StringComparison.OrdinalIgnoreCase)))
+        {
+            StatusText.Text = $@"\\{host}\{share} is already a saved connection in ""Connect to other PCs"".";
+            return;
+        }
         items.Add(new SavedConnection
         {
             Name = $"{share} on {host}", Host = host, Share = share,
             DriveLetter = row.Local != "(none)" ? row.Local : "None",
         });
-        ConnectionStore.Save(items);
-        StatusText.Text = $"Saved. It appears in \"Connect to other PCs\" after you restart the app.";
+        try
+        {
+            ConnectionStore.Save(items);
+            StatusText.Text = $"Saved. It's in the list in \"Connect to other PCs\".";
+        }
+        catch (Exception ex) { StatusText.Text = "Couldn't save the connection: " + ex.Message; }
     }
 }

@@ -10,14 +10,23 @@ namespace NetShareDoctor.Pages;
 public partial class ToolsPage : UserControl
 {
     private bool _running;
+    private readonly ListCollectionView _view;
 
     public ToolsPage()
     {
         InitializeComponent();
-        var view = new ListCollectionView(ToolCatalog.All.ToList());
-        view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ToolCommand.Category)));
-        ToolList.ItemsSource = view;
+        _view = new ListCollectionView(ToolCatalog.All.ToList());
+        _view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ToolCommand.Category)));
+        _view.Filter = o => o is ToolCommand t && Matches(t, FilterBox.Text.Trim());
+        ToolList.ItemsSource = _view;
     }
+
+    private static bool Matches(ToolCommand t, string filter) =>
+        filter.Length == 0 ||
+        t.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+        t.Description.Contains(filter, StringComparison.OrdinalIgnoreCase);
+
+    private void FilterBox_TextChanged(object sender, TextChangedEventArgs e) => _view?.Refresh();
 
     private ToolCommand? Selected => ToolList.SelectedItem as ToolCommand;
 
@@ -32,7 +41,11 @@ public partial class ToolsPage : UserControl
 
     private async void Run_Click(object sender, RoutedEventArgs e)
     {
-        if (Selected is { } t) await RunAsync(t.Label, t.Script, t.Admin);
+        if (Selected is not { } t) return;
+        if (t.Name == "Disconnect everything" && MessageBox.Show(Window.GetWindow(this)!,
+                "Disconnect every mapped drive and share connection?\nOpen files on those shares may lose unsaved changes.",
+                "Disconnect everything", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
+        await RunAsync(t.Label, t.Script, t.Admin);
     }
 
     private async void RunCustom_Click(object sender, RoutedEventArgs e) => await RunCustomAsync();
